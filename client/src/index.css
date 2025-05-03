@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 20 14.3% 4.1%;
+  --muted: 60 4.8% 95.9%;
+  --muted-foreground: 25 5.3% 44.7%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 20 14.3% 4.1%;
+  --card: 0 0% 100%;
+  --card-foreground: 20 14.3% 4.1%;
+  --border: 20 5.9% 90%;
+  --input: 20 5.9% 90%;
+  --primary: 25 89% 41%;
+  --primary-foreground: 60 9.1% 97.8%;
+  --secondary: 24 21% 20%;
+  --secondary-foreground: 0 0% 98%;
+  --accent: 35 77% 95%;
+  --accent-foreground: 24 9.8% 10%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 60 9.1% 97.8%;
+  --ring: 20 14.3% 4.1%;
+  --radius: 0.5rem;
+
+  /* Custom colors for Whisky Goggles */
+  --primary-color: #D35400;
+  --primary-light: #E67E22;
+  --primary-dark: #A04000;
+  --secondary-color: #3D2C29;
+  --secondary-light: #5D4037;
+  --secondary-dark: #2D201D;
+  --neutral-color: #F8F4E3;
+  --neutral-dark: #D7CCC8;
+  --success-color: #229954;
+  --error-color: #C0392B;
+  --warning-color: #F39C12;
+}
+
+.dark {
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+  --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%;
+  --popover: 240 10% 3.9%;
+  --popover-foreground: 0 0% 98%;
+  --card: 240 10% 3.9%;
+  --card-foreground: 0 0% 98%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --primary: 25 89% 41%;
+  --primary-foreground: 60 9.1% 97.8%;
+  --secondary: 24 21% 20%;
+  --secondary-foreground: 0 0% 98%;
+  --accent: 35 77% 95%;
+  --accent-foreground: 24 9.8% 10%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --ring: 240 4.9% 83.9%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-neutral-color text-secondary-dark;
+  }
+}
+
+/* Custom classes for Whisky Goggles */
+.app-heading {
+  font-family: 'Product Sans', 'Roboto', sans-serif;
+}
+
+.scanner-outline {
+  border: 2px dashed var(--primary-color);
+}
+
+.confidence-meter {
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.price-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+/* Colors */
+.bg-primary-color { background-color: var(--primary-color); }
+.bg-primary-light { background-color: var(--primary-light); }
+.bg-primary-dark { background-color: var(--primary-dark); }
+.bg-secondary-color { background-color: var(--secondary-color); }
+.bg-secondary-light { background-color: var(--secondary-light); }
+.bg-secondary-dark { background-color: var(--secondary-dark); }
+.bg-neutral-color { background-color: var(--neutral-color); }
+.bg-neutral-dark { background-color: var(--neutral-dark); }
+.bg-success-color { background-color: var(--success-color); }
+.bg-error-color { background-color: var(--error-color); }
+.bg-warning-color { background-color: var(--warning-color); }
+
+.text-primary-color { color: var(--primary-color); }
+.text-primary-light { color: var(--primary-light); }
+.text-primary-dark { color: var(--primary-dark); }
+.text-secondary-color { color: var(--secondary-color); }
+.text-secondary-light { color: var(--secondary-light); }
+.text-secondary-dark { color: var(--secondary-dark); }
+.text-neutral-color { color: var(--neutral-color); }
+.text-neutral-dark { color: var(--neutral-dark); }
+.text-success-color { color: var(--success-color); }
+.text-error-color { color: var(--error-color); }
+.text-warning-color { color: var(--warning-color); }
