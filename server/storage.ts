@@ -41,11 +41,20 @@ export class MemStorage implements IStorage {
     this.loadBottlesFromCSV();
   }
 
-  // Load bottles from the CSV file
+  // Load bottles from the CSV file or fallback to embedded dataset for Vercel deployment
   private loadBottlesFromCSV() {
     try {
-      const csvPath = path.resolve(process.cwd(), 'attached_assets/dataset.csv');
-      const fileContent = fs.readFileSync(csvPath, 'utf-8');
+      let fileContent: string;
+      
+      try {
+        // First try to load from filesystem (works in development)
+        const csvPath = path.resolve(process.cwd(), 'attached_assets/dataset.csv');
+        fileContent = fs.readFileSync(csvPath, 'utf-8');
+      } catch (fsError) {
+        console.log("Could not load CSV from file system, using embedded dataset...");
+        // In production (e.g., Vercel), load from the embedded dataset
+        fileContent = require('./embedded_dataset').bottleData;
+      }
       
       const records = parse(fileContent, {
         columns: true,
@@ -98,9 +107,9 @@ export class MemStorage implements IStorage {
         this.bottles.set(bottle.id, bottle);
       });
       
-      console.log(`Loaded ${this.bottles.size} bottles from CSV.`);
+      console.log(`Loaded ${this.bottles.size} bottles from ${this.bottles.size > 0 ? 'dataset' : 'embedded data'}.`);
     } catch (error) {
-      console.error("Error loading bottles from CSV:", error);
+      console.error("Error loading bottles data:", error);
     }
   }
 
@@ -143,11 +152,18 @@ export class MemStorage implements IStorage {
   async createScan(insertScan: InsertScan): Promise<Scan> {
     const id = this.scanIdCounter++;
     const timestamp = new Date();
+    
+    // Ensure all properties match the Scan type correctly
     const scan: Scan = { 
-      ...insertScan, 
       id, 
+      bottle_id: insertScan.bottle_id,
+      user_id: insertScan.user_id ?? null,
+      store_price: insertScan.store_price ?? null,
+      confidence: insertScan.confidence ?? null,
+      location: insertScan.location ?? null,
       created_at: timestamp 
     };
+    
     this.scans.set(id, scan);
     return scan;
   }
@@ -170,9 +186,15 @@ export class MemStorage implements IStorage {
       return undefined;
     }
 
+    // Create a new scan with proper type handling
     const updatedScan: Scan = {
-      ...existingScan,
-      ...data
+      id: existingScan.id,
+      bottle_id: data.bottle_id ?? existingScan.bottle_id,
+      user_id: data.user_id ?? existingScan.user_id,
+      store_price: data.store_price ?? existingScan.store_price,
+      confidence: data.confidence ?? existingScan.confidence,
+      location: data.location ?? existingScan.location,
+      created_at: existingScan.created_at
     };
     
     this.scans.set(id, updatedScan);

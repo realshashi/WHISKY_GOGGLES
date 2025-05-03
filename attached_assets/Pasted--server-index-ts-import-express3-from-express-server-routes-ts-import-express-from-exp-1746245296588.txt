@@ -1,0 +1,461 @@
+// server/index.ts
+import express3 from "express";
+
+// server/routes.ts
+import express from "express";
+import { createServer } from "http";
+
+// server/storage.ts
+import fs from "fs";
+import path from "path";
+import { parse } from "csv-parse/sync";
+var MemStorage = class {
+  users;
+  bottles;
+  scans;
+  userIdCounter;
+  scanIdCounter;
+  constructor() {
+    this.users = /* @__PURE__ */ new Map();
+    this.bottles = /* @__PURE__ */ new Map();
+    this.scans = /* @__PURE__ */ new Map();
+    this.userIdCounter = 1;
+    this.scanIdCounter = 1;
+    this.loadBottlesFromCSV();
+  }
+  // Load bottles from the CSV file
+  loadBottlesFromCSV() {
+    try {
+      const csvPath = path.resolve(process.cwd(), "attached_assets/dataset.csv");
+      const fileContent = fs.readFileSync(csvPath, "utf-8");
+      const records = parse(fileContent, {
+        columns: true,
+        skip_empty_lines: true,
+        cast: (value, context) => {
+          if (context.column === "id" || context.column === "brand_id" || context.column === "popularity" || context.column === "total_score" || context.column === "wishlist_count" || context.column === "vote_count" || context.column === "bar_count" || context.column === "ranking") {
+            return value ? parseInt(value, 10) : null;
+          }
+          if (context.column === "proof" || context.column === "abv" || context.column === "avg_msrp" || context.column === "fair_price" || context.column === "shelf_price") {
+            return value ? parseFloat(value) : null;
+          }
+          return value;
+        }
+      });
+      records.forEach((record) => {
+        const bottle = {
+          id: record.id,
+          name: record.name,
+          size: record.size,
+          proof: record.proof,
+          abv: record.abv,
+          spirit_type: record.spirit_type,
+          brand_id: record.brand_id,
+          popularity: record.popularity,
+          image_url: record.image_url,
+          avg_msrp: record.avg_msrp,
+          fair_price: record.fair_price,
+          shelf_price: record.shelf_price,
+          total_score: record.total_score,
+          wishlist_count: record.wishlist_count,
+          vote_count: record.vote_count,
+          bar_count: record.bar_count,
+          ranking: record.ranking
+        };
+        this.bottles.set(bottle.id, bottle);
+      });
+      console.log(`Loaded ${this.bottles.size} bottles from CSV.`);
+    } catch (error) {
+      console.error("Error loading bottles from CSV:", error);
+    }
+  }
+  // User operations
+  async getUser(id) {
+    return this.users.get(id);
+  }
+  async getUserByUsername(username) {
+    return Array.from(this.users.values()).find(
+      (user) => user.username === username
+    );
+  }
+  async createUser(insertUser) {
+    const id = this.userIdCounter++;
+    const user = { ...insertUser, id };
+    this.users.set(id, user);
+    return user;
+  }
+  // Bottle operations
+  async getBottles() {
+    return Array.from(this.bottles.values());
+  }
+  async getBottleById(id) {
+    return this.bottles.get(id);
+  }
+  async searchBottles(query) {
+    const lowerQuery = query.toLowerCase();
+    return Array.from(this.bottles.values()).filter(
+      (bottle) => bottle.name.toLowerCase().includes(lowerQuery) || bottle.spirit_type && bottle.spirit_type.toLowerCase().includes(lowerQuery)
+    );
+  }
+  // Scan operations
+  async createScan(insertScan) {
+    const id = this.scanIdCounter++;
+    const timestamp2 = /* @__PURE__ */ new Date();
+    const scan = {
+      ...insertScan,
+      id,
+      created_at: timestamp2
+    };
+    this.scans.set(id, scan);
+    return scan;
+  }
+  async getScans(userId) {
+    const allScans = Array.from(this.scans.values());
+    if (userId) {
+      return allScans.filter((scan) => scan.user_id === userId);
+    }
+    return allScans;
+  }
+  async getScanById(id) {
+    return this.scans.get(id);
+  }
+  async updateScan(id, data) {
+    const existingScan = this.scans.get(id);
+    if (!existingScan) {
+      return void 0;
+    }
+    const updatedScan = {
+      ...existingScan,
+      ...data
+    };
+    this.scans.set(id, updatedScan);
+    return updatedScan;
+  }
+  async deleteScan(id) {
+    return this.scans.delete(id);
+  }
+};
+var storage = new MemStorage();
+
+// shared/schema.ts
+import { pgTable, text, serial, integer, timestamp, doublePrecision } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+var users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull()
+});
+var insertUserSchema = createInsertSchema(users).pick({
+  username: true,
+  password: true
+});
+var bottles = pgTable("bottles", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  size: integer("size"),
+  proof: doublePrecision("proof"),
+  abv: doublePrecision("abv"),
+  spirit_type: text("spirit_type"),
+  brand_id: integer("brand_id"),
+  popularity: integer("popularity"),
+  image_url: text("image_url"),
+  avg_msrp: doublePrecision("avg_msrp"),
+  fair_price: doublePrecision("fair_price"),
+  shelf_price: doublePrecision("shelf_price"),
+  total_score: integer("total_score"),
+  wishlist_count: integer("wishlist_count"),
+  vote_count: integer("vote_count"),
+  bar_count: integer("bar_count"),
+  ranking: integer("ranking")
+});
+var insertBottleSchema = createInsertSchema(bottles);
+var scans = pgTable("scans", {
+  id: serial("id").primaryKey(),
+  user_id: integer("user_id"),
+  bottle_id: integer("bottle_id").notNull(),
+  store_price: doublePrecision("store_price"),
+  location: text("location"),
+  created_at: timestamp("created_at").defaultNow(),
+  confidence: doublePrecision("confidence")
+});
+var insertScanSchema = createInsertSchema(scans).omit({
+  id: true,
+  created_at: true
+});
+
+// server/routes.ts
+import { fromZodError } from "zod-validation-error";
+async function registerRoutes(app2) {
+  const apiRouter = express.Router();
+  apiRouter.get("/bottles", async (req, res) => {
+    try {
+      const bottles2 = await storage.getBottles();
+      res.json(bottles2);
+    } catch (error) {
+      console.error("Error fetching bottles:", error);
+      res.status(500).json({ message: "Failed to fetch bottles" });
+    }
+  });
+  apiRouter.get("/bottles/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid bottle ID" });
+      }
+      const bottle = await storage.getBottleById(id);
+      if (!bottle) {
+        return res.status(404).json({ message: "Bottle not found" });
+      }
+      res.json(bottle);
+    } catch (error) {
+      console.error("Error fetching bottle:", error);
+      res.status(500).json({ message: "Failed to fetch bottle" });
+    }
+  });
+  apiRouter.get("/bottles/search", async (req, res) => {
+    try {
+      const query = req.query.q;
+      if (!query) {
+        return res.status(400).json({ message: "Search query is required" });
+      }
+      const bottles2 = await storage.searchBottles(query);
+      res.json(bottles2);
+    } catch (error) {
+      console.error("Error searching bottles:", error);
+      res.status(500).json({ message: "Failed to search bottles" });
+    }
+  });
+  apiRouter.post("/scans", async (req, res) => {
+    try {
+      const parseResult = insertScanSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        const errorMessage = fromZodError(parseResult.error).message;
+        return res.status(400).json({ message: errorMessage });
+      }
+      const scan = await storage.createScan(parseResult.data);
+      res.status(201).json(scan);
+    } catch (error) {
+      console.error("Error creating scan:", error);
+      res.status(500).json({ message: "Failed to create scan" });
+    }
+  });
+  apiRouter.get("/scans", async (req, res) => {
+    try {
+      const userId = req.query.userId ? parseInt(req.query.userId, 10) : void 0;
+      const scans2 = await storage.getScans(userId);
+      res.json(scans2);
+    } catch (error) {
+      console.error("Error fetching scans:", error);
+      res.status(500).json({ message: "Failed to fetch scans" });
+    }
+  });
+  apiRouter.get("/scans/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid scan ID" });
+      }
+      const scan = await storage.getScanById(id);
+      if (!scan) {
+        return res.status(404).json({ message: "Scan not found" });
+      }
+      res.json(scan);
+    } catch (error) {
+      console.error("Error fetching scan:", error);
+      res.status(500).json({ message: "Failed to fetch scan" });
+    }
+  });
+  apiRouter.patch("/scans/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid scan ID" });
+      }
+      const scan = await storage.getScanById(id);
+      if (!scan) {
+        return res.status(404).json({ message: "Scan not found" });
+      }
+      const parseResult = insertScanSchema.partial().safeParse(req.body);
+      if (!parseResult.success) {
+        const errorMessage = fromZodError(parseResult.error).message;
+        return res.status(400).json({ message: errorMessage });
+      }
+      const updatedScan = await storage.updateScan(id, parseResult.data);
+      res.json(updatedScan);
+    } catch (error) {
+      console.error("Error updating scan:", error);
+      res.status(500).json({ message: "Failed to update scan" });
+    }
+  });
+  apiRouter.delete("/scans/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid scan ID" });
+      }
+      const success = await storage.deleteScan(id);
+      if (!success) {
+        return res.status(404).json({ message: "Scan not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting scan:", error);
+      res.status(500).json({ message: "Failed to delete scan" });
+    }
+  });
+  app2.use("/api", apiRouter);
+  const httpServer = createServer(app2);
+  return httpServer;
+}
+
+// server/vite.ts
+import express2 from "express";
+import fs2 from "fs";
+import path3 from "path";
+import { createServer as createViteServer, createLogger } from "vite";
+
+// vite.config.ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path2 from "path";
+import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+var vite_config_default = defineConfig({
+  plugins: [
+    react(),
+    runtimeErrorOverlay(),
+    ...process.env.NODE_ENV !== "production" && process.env.REPL_ID !== void 0 ? [
+      await import("@replit/vite-plugin-cartographer").then(
+        (m) => m.cartographer()
+      )
+    ] : []
+  ],
+  resolve: {
+    alias: {
+      "@": path2.resolve(import.meta.dirname, "client", "src"),
+      "@shared": path2.resolve(import.meta.dirname, "shared"),
+      "@assets": path2.resolve(import.meta.dirname, "attached_assets")
+    }
+  },
+  root: path2.resolve(import.meta.dirname, "client"),
+  build: {
+    outDir: path2.resolve(import.meta.dirname, "dist/public"),
+    emptyOutDir: true
+  }
+});
+
+// server/vite.ts
+import { nanoid } from "nanoid";
+var viteLogger = createLogger();
+function log(message, source = "express") {
+  const formattedTime = (/* @__PURE__ */ new Date()).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  });
+  console.log(`${formattedTime} [${source}] ${message}`);
+}
+async function setupVite(app2, server) {
+  const serverOptions = {
+    middlewareMode: true,
+    hmr: { server },
+    allowedHosts: true
+  };
+  const vite = await createViteServer({
+    ...vite_config_default,
+    configFile: false,
+    customLogger: {
+      ...viteLogger,
+      error: (msg, options) => {
+        viteLogger.error(msg, options);
+        process.exit(1);
+      }
+    },
+    server: serverOptions,
+    appType: "custom"
+  });
+  app2.use(vite.middlewares);
+  app2.use("*", async (req, res, next) => {
+    const url = req.originalUrl;
+    try {
+      const clientTemplate = path3.resolve(
+        import.meta.dirname,
+        "..",
+        "client",
+        "index.html"
+      );
+      let template = await fs2.promises.readFile(clientTemplate, "utf-8");
+      template = template.replace(
+        `src="/src/main.tsx"`,
+        `src="/src/main.tsx?v=${nanoid()}"`
+      );
+      const page = await vite.transformIndexHtml(url, template);
+      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+    } catch (e) {
+      vite.ssrFixStacktrace(e);
+      next(e);
+    }
+  });
+}
+function serveStatic(app2) {
+  const distPath = path3.resolve(import.meta.dirname, "public");
+  if (!fs2.existsSync(distPath)) {
+    throw new Error(
+      `Could not find the build directory: ${distPath}, make sure to build the client first`
+    );
+  }
+  app2.use(express2.static(distPath));
+  app2.use("*", (_req, res) => {
+    res.sendFile(path3.resolve(distPath, "index.html"));
+  });
+}
+
+// server/index.ts
+var app = express3();
+app.use(express3.json());
+app.use(express3.urlencoded({ extended: false }));
+app.use((req, res, next) => {
+  const start = Date.now();
+  const path4 = req.path;
+  let capturedJsonResponse = void 0;
+  const originalResJson = res.json;
+  res.json = function(bodyJson, ...args) {
+    capturedJsonResponse = bodyJson;
+    return originalResJson.apply(res, [bodyJson, ...args]);
+  };
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    if (path4.startsWith("/api")) {
+      let logLine = `${req.method} ${path4} ${res.statusCode} in ${duration}ms`;
+      if (capturedJsonResponse) {
+        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      }
+      if (logLine.length > 80) {
+        logLine = logLine.slice(0, 79) + "\u2026";
+      }
+      log(logLine);
+    }
+  });
+  next();
+});
+(async () => {
+  const server = await registerRoutes(app);
+  app.use((err, _req, res, _next) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
+    res.status(status).json({ message });
+    throw err;
+  });
+  if (app.get("env") === "development") {
+    await setupVite(app, server);
+  } else {
+    serveStatic(app);
+  }
+  const port = 5e3;
+  server.listen({
+    port,
+    host: "0.0.0.0",
+    reusePort: true
+  }, () => {
+    log(`serving on port ${port}`);
+  });
+})();

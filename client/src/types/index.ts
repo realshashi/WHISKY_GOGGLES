@@ -29,6 +29,16 @@ export interface ScanResult {
   noMatches: boolean;
 }
 
+export interface Scan {
+  id: number;
+  bottle_id: number;
+  user_id?: number;
+  store_price?: number;
+  confidence?: number;
+  location?: string;
+  created_at?: string | Date;
+}
+
 export interface SavedScan {
   id: string;
   timestamp: number;
